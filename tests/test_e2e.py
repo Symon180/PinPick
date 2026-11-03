@@ -97,3 +97,63 @@ def test_cli_pexels_senza_chiave(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("PEXELS_API_KEY", raising=False)
     assert main(["-s", "pexels", "--out", str(tmp_path)]) == 2
     assert "PEXELS_API_KEY" in capsys.readouterr().err
+
+
+# --- Openverse (nessuna chiave) -------------------------------------------------
+from pinpick.sources.openverse import OpenverseSource, parse_image  # noqa: E402
+
+
+def test_openverse_ricerca_con_paginazione_e_credito(api_url):
+    photos = list(OpenverseSource(api_url).photos("a"))  # "a" compare in quasi tutti i testi
+    assert len(photos) >= 5 and all(p.id.startswith("openverse-") for p in photos)
+    assert "Anna Verdi" in photos[0].credit and "CC BY 4.0" in photos[0].credit
+
+
+def test_openverse_senza_parola_chiave(api_url):
+    with pytest.raises(ApiError):
+        list(OpenverseSource(api_url).photos(""))
+
+
+def test_openverse_parse_scarta_voci_incomplete():
+    assert parse_image({"id": "x"}) is None and parse_image({"url": "u"}) is None
+
+
+def test_cli_openverse_con_orientamento_senza_dimensioni(tmp_path, capsys):
+    # le dimensioni possono mancare: il filtro orientamento lo fa il server
+    assert main(["-s", "openverse", "-k", "pizza", "-o", "landscape", "--out", str(tmp_path)]) == 0
+    assert "Credito: Anna Verdi" in capsys.readouterr().out
+
+
+def test_cli_openverse_nessun_risultato(tmp_path):
+    assert main(["-s", "openverse", "-k", "zzzz", "--out", str(tmp_path)]) == 1
+
+
+# --- Wikimedia Commons (nessuna chiave) ------------------------------------------
+from pinpick.sources.wikimedia import WikimediaSource, parse_page  # noqa: E402
+
+
+def test_wikimedia_ricerca_paginata_e_filtro_orientamento(api_url):
+    tutte = list(WikimediaSource(api_url).photos("a"))
+    assert len(tutte) >= 5 and all(p.id.startswith("commons-") for p in tutte)
+    verticali = list(WikimediaSource(api_url).photos("a", "portrait"))
+    assert verticali and all(p.orientation == "portrait" for p in verticali)
+
+
+def test_wikimedia_credito_ripulito_dall_html(api_url):
+    [p, *_] = list(WikimediaSource(api_url).photos("pizza"))
+    assert "Luca & Co" in p.credit and "<a" not in p.credit and "CC BY-SA 4.0" in p.credit
+
+
+def test_wikimedia_senza_parola_chiave(api_url):
+    with pytest.raises(ApiError):
+        list(WikimediaSource(api_url).photos(""))
+
+
+def test_wikimedia_parse_scarta_formati_non_immagine():
+    assert parse_page({"pageid": 1, "title": "File:x.ogg", "imageinfo": [{"mime": "audio/ogg", "url": "u"}]}) is None
+    assert parse_page({"pageid": 2, "title": "File:x.jpg"}) is None
+
+
+def test_cli_wikimedia_scarica_con_credito(tmp_path, capsys):
+    assert main(["-s", "wikimedia", "-k", "pizza", "--out", str(tmp_path)]) == 0
+    assert "Credito: Luca & Co" in capsys.readouterr().out

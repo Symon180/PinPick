@@ -108,4 +108,49 @@ def create_app() -> Flask:
     app.add_url_rule("/v1/search", "pexels_search", pexels_search)
     app.add_url_rule("/v1/curated", "pexels_curated", pexels_search)
 
+    # --- finta API Wikimedia Commons (nessuna chiave) -------------------------
+    @app.get("/w/api.php")
+    def wikimedia_api():
+        query = request.args.get("gsrsearch", "").replace("filetype:bitmap", "").strip().lower()
+        offset = request.args.get("gsroffset", 0, type=int)
+        base = request.host_url.rstrip("/")
+        hits = [
+            (pid, title, w, h) for pid, title, desc, w, h, _b in PINS if query in f"{title} {desc}".lower()
+        ]
+        chunk = hits[offset : offset + SERVER_PAGE]
+        pages = {
+            str(500 + i): {
+                "pageid": 500 + i, "title": f"File:{title}.jpg",
+                "imageinfo": [{
+                    "mime": "image/png", "width": w, "height": h, "thumburl": f"{base}/img/{pid}.png",
+                    "thumbwidth": w, "thumbheight": h, "descriptionurl": f"https://commons.example/{pid}",
+                    "extmetadata": {"Artist": {"value": '<a href="//x">Luca &amp; Co</a>'},
+                                    "LicenseShortName": {"value": "CC BY-SA 4.0"}},
+                }],
+            }
+            for i, (pid, title, w, h) in enumerate(chunk, start=offset)
+        }
+        out: dict = {"query": {"pages": pages}} if pages else {}
+        if offset + SERVER_PAGE < len(hits):
+            out["continue"] = {"gsroffset": offset + SERVER_PAGE, "continue": "gsroffset||"}
+        return jsonify(out)
+
+    # --- finta API Openverse (nessuna chiave) ---------------------------------
+    @app.get("/v1/images/")
+    def openverse_images():
+        query = request.args.get("q", "").lower()
+        wanted = request.args.get("aspect_ratio")
+        page = request.args.get("page", 1, type=int)
+        base = request.host_url.rstrip("/")
+        kind = lambda w, h: "square" if w == h else "tall" if h > w else "wide"  # noqa: E731
+        hits = [
+            {"id": f"uuid-{pid}", "title": title, "url": f"{base}/img/{pid}.png", "creator": "Anna Verdi",
+             "license": "by", "license_version": "4.0", "source": "flickr",
+             "foreign_landing_url": f"https://example.org/{pid}", "width": None, "height": None}
+            for pid, title, desc, w, h, _b in PINS
+            if query in f"{title} {desc}".lower() and (not wanted or wanted == kind(w, h))
+        ]
+        chunk = hits[(page - 1) * SERVER_PAGE : page * SERVER_PAGE]
+        return jsonify(results=chunk, page_count=max(1, -(-len(hits) // SERVER_PAGE)))
+
     return app

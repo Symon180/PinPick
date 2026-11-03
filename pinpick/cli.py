@@ -10,9 +10,9 @@ from .downloader import History, download
 from .errors import EXIT_NO_RESULTS, EXIT_OK, ConfigError, PinPickError
 from .models import ORIENTATIONS
 from .picker import select
-from .sources import pexels, pinterest
+from .sources import openverse, pexels, pinterest, wikimedia
 
-SOURCES = ("pinterest", "pexels")
+SOURCES = ("pinterest", "pexels", "openverse", "wikimedia")
 
 
 def ask(prompt: str, default: str) -> str:
@@ -23,7 +23,8 @@ def ask(prompt: str, default: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="pinpick", description="Scarica foto a caso da Pinterest (tue bacheche) o Pexels.")
     p.add_argument("--source", "-s", choices=SOURCES, default="pinterest",
-                   help="pinterest = le tue bacheche (token), pexels = tutto il catalogo (chiave gratuita)")
+                   help="pinterest = le tue bacheche (token); pexels = catalogo (chiave); "
+                        "openverse e wikimedia = immagini libere (nessuna chiave)")
     p.add_argument("--keyword", "-k", help="parola chiave")
     p.add_argument("--orientation", "-o", choices=ORIENTATIONS, help="orientamento della foto")
     p.add_argument("--count", "-n", type=int, help="quante foto scaricare")
@@ -35,6 +36,10 @@ def build_parser() -> argparse.ArgumentParser:
 def make_source(name: str):
     """Crea la fonte leggendo le credenziali dall'ambiente (mai da file o riga di comando)."""
     base = os.environ.get("PINPICK_API_BASE")
+    if name == "wikimedia":
+        return wikimedia.WikimediaSource(base or wikimedia.DEFAULT_BASE)
+    if name == "openverse":
+        return openverse.OpenverseSource(base or openverse.DEFAULT_BASE)
     if name == "pexels":
         key = os.environ.get("PEXELS_API_KEY")
         if not key:
@@ -62,7 +67,7 @@ def main(argv: list[str] | None = None) -> int:
         history = History(args.out / ".scaricate.json")
         if source.handles_search:  # il server ha gia filtrato: non rifiltrare per testo
             candidates = source.photos(keyword, orientation)
-            chosen = select(candidates, "", orientation, count,
+            chosen = select(candidates, "", "any", count,  # orientamento gia filtrato dal server
                             exclude_ids=set() if args.allow_repeats else history.ids)
         else:
             chosen = select(source.photos(), keyword, orientation, count,

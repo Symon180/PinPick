@@ -1,68 +1,75 @@
-# PortalFetch
+# PinPick
 
-[![CI](https://github.com/Symon180/PortalFetch/actions/workflows/ci.yml/badge.svg)](https://github.com/Symon180/PortalFetch/actions/workflows/ci.yml)
+[![CI](https://github.com/Symon180/PinPick/actions/workflows/ci.yml/badge.svg)](https://github.com/Symon180/PinPick/actions/workflows/ci.yml)
 ![Python](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)
-![Playwright](https://img.shields.io/badge/Browser-Playwright-2EAD33?logo=playwright&logoColor=white)
+![Dependencies](https://img.shields.io/badge/Dipendenze%20runtime-0-brightgreen)
 ![Platform](https://img.shields.io/badge/Linux%20%7C%20Windows-tested%20in%20CI-lightgrey)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg)
 
-Motore a **plugin** in Python per scaricare in automatico documenti (es. fatture PDF) da portali web con login.
-Nasce dall'esperienza di automazione di un back office che gestiva decine di portali diversi: qui la parte generica
-(motore, tracking, gestione errori) è separata dai siti, che si aggiungono con un file di configurazione o con un piccolo plugin.
+Programma a riga di comando che **scarica foto a caso dalle tue bacheche Pinterest**, in base a quello che chiedi:
+parola chiave, orientamento (verticale/orizzontale/quadrata) e quante foto.
 
-> Il progetto include un **portale demo** locale con fatture finte: si prova subito, senza account né siti reali.
+Usa l'**API ufficiale di Pinterest v5**, senza scraping né browser automatici: legge i pin dell'account a cui appartiene il tuo token.
+Python puro, **nessuna dipendenza** da installare per usarlo.
 
-*English: a plugin-based Playwright engine that logs in to web portals and downloads new documents, with idempotent tracking, safe file handling and a demo portal. Tested on Linux and Windows in CI.*
+*English: a CLI that downloads random photos from your own Pinterest boards through the official v5 API, filtered by keyword, orientation and count. Standard library only. Tested on Linux and Windows in CI.*
 
-## Funzionalità
-- **Due modi per aggiungere un sito:** solo selettori CSS in YAML (`type: generic`), oppure un plugin Python che estende `Portal` (vedi `portalfetch/portals/demo_api.py`).
-- **Idempotente:** i documenti già scaricati vengono saltati (registro JSON scritto in modo atomico, anche se il programma si interrompe).
-- **Errori distinti:** credenziali rifiutate, sito non disponibile, configurazione errata; un sito guasto non blocca gli altri; codici di uscita per scheduler.
-- **Sicurezza:** credenziali solo da variabili d'ambiente, un solo tentativo di login (per non bloccare l'account), nomi file ripuliti contro path traversal.
-- **Portabile:** Linux e Windows (su Windows può usare Edge già installato con `browser: msedge`).
-
-## Avvio rapido
+## Uso
 ```bash
-git clone https://github.com/Symon180/PortalFetch.git && cd PortalFetch
-python -m venv .venv && source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-playwright install chromium
-
-python -m demo_server &                                   # portale demo su http://127.0.0.1:8765
-cp sites.example.yaml sites.yaml
-export PORTALFETCH_DEMO_USER=demo PORTALFETCH_DEMO_PASSWORD=demo123    # Windows PowerShell: $env:NOME="valore"
-python -m portalfetch run --config sites.yaml --site demo
+pip install -e .
+export PINTEREST_ACCESS_TOKEN=...        # Windows PowerShell: $env:PINTEREST_ACCESS_TOKEN="..."
+pinpick                                  # chiede parola chiave, orientamento e quantita
+pinpick -k mare -o landscape -n 3        # oppure tutto da riga di comando
 ```
-I PDF finiscono in `downloads/demo/`; rilanciando il comando non viene scaricato nulla di nuovo. Opzioni: `--scan-only`, `--site` (ripetibile).
+Le foto finiscono in `./foto/`. PinPick ricorda quelle già scaricate (`foto/.scaricate.json`) e non le ripete, a meno di usare `--allow-repeats`.
 
-## Aggiungere un nuovo sito
-1. Apri la pagina di login, trova i selettori CSS di utente, password, pulsante e dei link ai documenti.
-2. Aggiungi un blocco sotto `sites:` in `sites.yaml` (vedi `sites.example.yaml`).
-3. Imposta `PORTALFETCH_<NOME>_USER` e `PORTALFETCH_<NOME>_PASSWORD`.
-4. Se il sito ha un flusso particolare, crea una classe con `@register("mio_tipo")` che implementa `login`, `list_documents` e `download`.
+| Opzione | Significato |
+|---|---|
+| `-k, --keyword` | cerca in titolo, descrizione e nome della bacheca (senza maiuscole) |
+| `-o, --orientation` | `any`, `portrait`, `landscape`, `square` |
+| `-n, --count` | quante foto scaricare (default 1) |
+| `--out` | cartella di destinazione |
+| `--allow-repeats` | permette di riscaricare foto già prese |
 
-Usalo solo su account e dati tuoi e nel rispetto dei termini d'uso dei siti.
+Codici di uscita: `0` ok, `1` nessuna foto trovata, `2` token/configurazione, `3` errore dell'API.
+
+## Token
+Serve un token personale dell'API Pinterest (non c'è alcun login con password nel programma):
+1. Crea un'app su [developers.pinterest.com](https://developers.pinterest.com/apps/).
+2. Genera un access token con gli scope `boards:read` e `pins:read`.
+3. Esportalo come `PINTEREST_ACCESS_TOKEN`. Non va mai scritto nel codice né committato (`.env` è nel `.gitignore`).
+
+L'API permette di leggere **i tuoi** pin e le tue bacheche, non di cercare liberamente in tutto Pinterest. L'accesso alle API può richiedere l'approvazione di Pinterest: controlla le condizioni attuali sul loro sito.
+
+## Provarlo senza token
+Il progetto include una **finta API Pinterest** locale con 2 bacheche e 8 foto generate al volo:
+```bash
+pip install -e ".[dev]"
+python -m fake_pinterest                                  # terminale 1: http://127.0.0.1:8766
+# terminale 2:
+export PINPICK_API_BASE=http://127.0.0.1:8766 PINTEREST_ACCESS_TOKEN=demo-token
+pinpick -k spiaggia -o portrait
+```
+La finta API serve anche ai test, che quindi girano ovunque senza rete.
 
 ## Architettura
 ```
-portalfetch/
-├── engine.py      # per ogni sito: login -> elenco -> scarica i nuovi -> logout (sempre, in finally)
-├── base.py        # contratto Portal / Document
-├── registry.py    # @register("tipo")
-├── portals/       # plugin: generic (CSS) e demo_api (codice)
-├── tracking.py    # registro dei già scaricati, scrittura atomica
-├── config.py      # YAML + credenziali da ambiente
-├── browser.py     # Chromium o Edge
-└── errors.py      # AuthenticationRequired / PortalUnavailable / ConfigError
-demo_server/       # portale fittizio (Flask) per provare e testare
-tests/             # unit test + end-to-end con browser reale
+pinpick/
+├── sources/pinterest.py   # client API v5: paginazione, errori 401/429, solo immagini
+├── models.py              # Photo (orientamento, ricerca per parola chiave)
+├── picker.py              # filtri + scelta casuale (riproducibile nei test)
+├── downloader.py          # download sicuro (tipo e peso verificati, nome file ripulito) + storico atomico
+├── cli.py                 # domande interattive e opzioni
+└── errors.py              # AuthError / ApiError / ConfigError con codici di uscita
+fake_pinterest/            # finta API per demo e test
+tests/                     # 16 test: unitari ed end-to-end
 ```
+Scelte progettuali: nessuna dipendenza esterna; `pinpick/sources/` è pensato per aggiungere altre fonti (es. Unsplash); storico scritto in modo atomico; limite di 25 MB e controllo del content-type sui download; tetto alle pagine lette.
 
 ## Test
 ```bash
 pytest
 ```
-12 test: unitari (configurazione, tracking, sicurezza dei nomi file) ed end-to-end con browser reale contro il portale demo (paginazione, secondo giro senza duplicati, password errata, `--scan-only`). La CI li esegue su Ubuntu e Windows.
 
 ## Licenza
-MIT, autore [Simone Mariotti](https://github.com/Symon180).
+MIT, autore [Simone Mariotti](https://github.com/Symon180). Rispetta i diritti d'autore delle immagini che scarichi.

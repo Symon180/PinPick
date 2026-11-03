@@ -19,6 +19,6 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
           cache: pip
+          cache-dependency-path: pyproject.toml
       - run: pip install -e ".[dev]"
-      - run: playwright install --with-deps chromium
       - run: python -m pytest -q

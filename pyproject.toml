@@ -1,21 +1,19 @@
 [project]
-name = "portalfetch"
+name = "pinpick"
 version = "0.1.0"
-description = "Motore a plugin per scaricare documenti da portali web (Playwright)"
+description = "Scarica foto a caso dalle tue bacheche Pinterest tramite l'API ufficiale"
 requires-python = ">=3.10"
 license = { text = "MIT" }
-dependencies = ["playwright>=1.45", "PyYAML>=6"]
+dependencies = []
 
 [project.optional-dependencies]
-dev = ["pytest>=8", "pytest-asyncio>=0.23", "flask>=3"]
+dev = ["pytest>=8", "flask>=3"]
 
 [project.scripts]
-portalfetch = "portalfetch.cli:main"
+pinpick = "pinpick.cli:main"
 
 [tool.setuptools]
-packages = ["portalfetch", "portalfetch.portals", "demo_server"]
+packages = ["pinpick", "pinpick.sources", "fake_pinterest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-asyncio_mode = "auto"
-asyncio_default_fixture_loop_scope = "function"

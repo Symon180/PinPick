@@ -1,51 +1,58 @@
-"""Test end-to-end: browser reale contro il portale demo locale."""
+"""End-to-end: client reale contro la finta API Pinterest (nessuna rete, nessun token vero)."""
 import pytest
 
-from portalfetch.config import Config
-from portalfetch.engine import exit_code, run
-
-SEL = {"user": "#user", "password": "#password", "submit": "#submit",
-       "logged_in": "#area", "error": ".error", "links": "a.inv", "next": "#next"}
-
-
-def make_config(tmp_path, url, kind="generic"):
-    return Config(
-        download_dir=tmp_path / "dl",
-        tracking_file=tmp_path / "tracking.json",
-        sites={"demo": {"type": kind, "url": f"{url}/login", "selectors": SEL}},
-    )
+from pinpick.cli import main
+from pinpick.errors import ApiError, AuthError
+from pinpick.sources.pinterest import PinterestSource
 
 
 @pytest.fixture(autouse=True)
-def creds(monkeypatch):
-    monkeypatch.setenv("PORTALFETCH_DEMO_USER", "demo")
-    monkeypatch.setenv("PORTALFETCH_DEMO_PASSWORD", "demo123")
+def env(monkeypatch, api_url):
+    monkeypatch.setenv("PINPICK_API_BASE", api_url)
+    monkeypatch.setenv("PINTEREST_ACCESS_TOKEN", "demo-token")
 
 
-async def test_scarica_tutto_con_paginazione_e_poi_salta_i_gia_scaricati(tmp_path, demo_url):
-    cfg = make_config(tmp_path, demo_url)
-    [r1] = await run(cfg)
-    assert r1.error is None and len(r1.downloaded) == 12  # 3 pagine da 5/5/2
-    files = sorted((tmp_path / "dl" / "demo").glob("*.pdf"))
-    assert len(files) == 12 and files[0].read_bytes().startswith(b"%PDF")
-
-    [r2] = await run(cfg)  # secondo giro: niente da fare
-    assert r2.downloaded == [] and r2.skipped == 12
-    assert exit_code([r1, r2]) == 0
+def test_legge_tutte_le_pagine_e_salta_i_video(api_url):
+    photos = list(PinterestSource("demo-token", api_url).photos())
+    assert sorted(p.id for p in photos) == [f"p{i}" for i in range(1, 9)]  # 8 foto, paginate da 4
 
 
-async def test_plugin_in_codice_con_api_json(tmp_path, demo_url):
-    [r] = await run(make_config(tmp_path, demo_url, kind="demo_api"))
-    assert r.error is None and len(r.downloaded) == 12
+def test_token_sbagliato(api_url):
+    with pytest.raises(AuthError):
+        list(PinterestSource("sbagliato", api_url).photos())
 
 
-async def test_password_errata_non_scarica_nulla(tmp_path, demo_url, monkeypatch):
-    monkeypatch.setenv("PORTALFETCH_DEMO_PASSWORD", "sbagliata")
-    [r] = await run(make_config(tmp_path, demo_url))
-    assert r.error and "accesso rifiutato" in r.error and r.downloaded == []
-    assert exit_code([r]) == 1
+def test_server_non_raggiungibile():
+    with pytest.raises(ApiError):
+        list(PinterestSource("t", "http://127.0.0.1:1").photos())
 
 
-async def test_scan_only_non_scrive_file(tmp_path, demo_url):
-    [r] = await run(make_config(tmp_path, demo_url), scan_only=True)
-    assert len(r.downloaded) == 12 and not (tmp_path / "dl").exists()
+def test_cli_scarica_foto_filtrate(tmp_path, capsys):
+    code = main(["-k", "mare", "-o", "landscape", "-n", "1", "--out", str(tmp_path)])
+    out = capsys.readouterr().out
+    assert code == 0 and "Scaricata" in out
+    [img] = [p for p in tmp_path.iterdir() if p.suffix == ".png"]
+    assert img.read_bytes().startswith(b"\x89PNG") and img.stat().st_size > 100
+
+
+def test_cli_non_riscarica_le_stesse(tmp_path):
+    args = ["-k", "pizza", "--out", str(tmp_path)]
+    assert main(args) == 0
+    assert main(args) == 1  # l'unica "pizza" e gia stata scaricata
+    assert main(args + ["--allow-repeats"]) == 0
+
+
+def test_cli_nessun_risultato(tmp_path, capsys):
+    assert main(["-k", "inesistente", "--out", str(tmp_path)]) == 1
+
+
+def test_cli_senza_token(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("PINTEREST_ACCESS_TOKEN")
+    assert main(["--out", str(tmp_path)]) == 2
+    assert "PINTEREST_ACCESS_TOKEN" in capsys.readouterr().err
+
+
+def test_cli_token_rifiutato(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PINTEREST_ACCESS_TOKEN", "scaduto")
+    assert main(["--out", str(tmp_path)]) == 2
+    assert "token" in capsys.readouterr().err

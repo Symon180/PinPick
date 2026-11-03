@@ -14,21 +14,27 @@ Python puro, **nessuna dipendenza** da installare per usarlo.
 
 *English: a CLI that downloads random photos from your own Pinterest boards through the official v5 API, filtered by keyword, orientation and count. Standard library only. Tested on Linux and Windows in CI.*
 
-## Uso
+## Uso rapido (zero installazione, zero chiavi)
+Non serve né `pip` né chiavi API: basta avere Python 3.10+.
 ```bash
-pip install -e .
-export PINTEREST_ACCESS_TOKEN=...        # Windows PowerShell: $env:PINTEREST_ACCESS_TOKEN="..."
-pinpick                                  # chiede parola chiave, orientamento e quantita
-pinpick -k mare -o landscape -n 3        # oppure tutto da riga di comando
+git clone https://github.com/Symon180/PinPick.git
+cd PinPick
+./avvia.sh                               # Linux / macOS (interattivo)
+avvia.bat                                # Windows (doppio clic o terminale)
 ```
-Le foto finiscono in `./foto/`. PinPick ricorda quelle già scaricate (`foto/.scaricate.json`) e non le ripete, a meno di usare `--allow-repeats`.
+Oppure passando direttamente i parametri:
+```bash
+./avvia.sh -k "mountain lake" -o landscape -n 3
+```
+Le foto vengono salvate nella cartella `./foto/`. PinPick ricorda quelle già scaricate (`foto/.scaricate.json`) e non le ripete, a meno di usare `--allow-repeats`.
 
 | Opzione | Significato |
 |---|---|
-| `-k, --keyword` | cerca in titolo, descrizione e nome della bacheca (senza maiuscole) |
+| `-s, --source` | `wikimedia` (default), `openverse`, `pexels`, `pinterest` |
+| `-k, --keyword` | parola chiave (es. `mountain`, `sunset`, `architecture`) |
 | `-o, --orientation` | `any`, `portrait`, `landscape`, `square` |
 | `-n, --count` | quante foto scaricare (default 1) |
-| `--out` | cartella di destinazione |
+| `--out` | cartella di destinazione (default `./foto`) |
 | `--allow-repeats` | permette di riscaricare foto già prese |
 
 Codici di uscita: `0` ok, `1` nessuna foto trovata, `2` token/configurazione, `3` errore dell'API.
@@ -36,10 +42,10 @@ Codici di uscita: `0` ok, `1` nessuna foto trovata, `2` token/configurazione, `3
 ## Fonti
 | Fonte | Opzione | Credenziale | Cosa cerca |
 |---|---|---|---|
-| Pinterest | `-s pinterest` (default) | `PINTEREST_ACCESS_TOKEN` | solo i **tuoi** pin e bacheche |
-| Wikimedia Commons | `-s wikimedia` | nessuna | milioni di immagini libere, per parola chiave (**consigliata per provare subito**) |
-| Openverse | `-s openverse` | nessuna | immagini con licenza Creative Commons (il servizio anonimo a volte e lento: il programma riprova 3 volte) |
-| Pexels | `-s pexels` | `PEXELS_API_KEY` (gratuita su [pexels.com/api](https://www.pexels.com/api/)) | tutto il catalogo, per parola chiave |
+| Wikimedia Commons | `-s wikimedia` (**default**) | nessuna | milioni di immagini libere, per parola chiave (**funziona subito**) |
+| Openverse | `-s openverse` | nessuna | immagini con licenza Creative Commons (riprova in automatico su errori 5xx) |
+| Pexels | `-s pexels` | `PEXELS_API_KEY` | catalogo fotografico per parola chiave |
+| Pinterest | `-s pinterest` | `PINTEREST_ACCESS_TOKEN` | i **tuoi** pin e le tue bacheche tramite API ufficiale v5 |
 
 ```bash
 pinpick -s wikimedia -k "mountain lake" -o landscape -n 2     # funziona subito, senza chiavi

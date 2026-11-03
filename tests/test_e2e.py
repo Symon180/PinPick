@@ -48,13 +48,13 @@ def test_cli_nessun_risultato(tmp_path, capsys):
 
 def test_cli_senza_token(tmp_path, monkeypatch, capsys):
     monkeypatch.delenv("PINTEREST_ACCESS_TOKEN")
-    assert main(["--out", str(tmp_path)]) == 2
+    assert main(["-s", "pinterest", "--out", str(tmp_path)]) == 2
     assert "PINTEREST_ACCESS_TOKEN" in capsys.readouterr().err
 
 
 def test_cli_token_rifiutato(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("PINTEREST_ACCESS_TOKEN", "scaduto")
-    assert main(["--out", str(tmp_path)]) == 2
+    assert main(["-s", "pinterest", "--out", str(tmp_path)]) == 2
     assert "token" in capsys.readouterr().err
 
 

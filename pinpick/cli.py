@@ -12,7 +12,7 @@ from .models import ORIENTATIONS
 from .picker import select
 from .sources import openverse, pexels, pinterest, wikimedia
 
-SOURCES = ("pinterest", "pexels", "openverse", "wikimedia")
+SOURCES = ("wikimedia", "openverse", "pexels", "pinterest")
 
 
 def ask(prompt: str, default: str) -> str:
@@ -22,9 +22,9 @@ def ask(prompt: str, default: str) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(prog="pinpick", description="Scarica foto a caso da Pinterest (tue bacheche) o Pexels.")
-    p.add_argument("--source", "-s", choices=SOURCES, default="pinterest",
-                   help="pinterest = le tue bacheche (token); pexels = catalogo (chiave); "
-                        "openverse e wikimedia = immagini libere (nessuna chiave)")
+    p.add_argument("--source", "-s", choices=SOURCES, default="wikimedia",
+                   help="wikimedia e openverse = immagini libere (nessuna chiave, default: wikimedia); "
+                        "pexels = catalogo (chiave); pinterest = le tue bacheche (token)")
     p.add_argument("--keyword", "-k", help="parola chiave")
     p.add_argument("--orientation", "-o", choices=ORIENTATIONS, help="orientamento della foto")
     p.add_argument("--count", "-n", type=int, help="quante foto scaricare")
@@ -54,8 +54,8 @@ def make_source(name: str):
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if sys.stdin.isatty():  # chiede solo cio che manca
-        if args.keyword is None:
-            args.keyword = ask("Parola chiave (vuoto = qualsiasi)", "")
+        if not args.keyword:
+            args.keyword = ask("Parola chiave (es. mountain, cat, cyberpunk)", "nature")
         if args.orientation is None:
             args.orientation = ask(f"Orientamento ({'/'.join(ORIENTATIONS)})", "any")
         if args.count is None:

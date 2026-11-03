@@ -10,7 +10,9 @@ from .downloader import History, download
 from .errors import EXIT_NO_RESULTS, EXIT_OK, ConfigError, PinPickError
 from .models import ORIENTATIONS
 from .picker import select
-from .sources.pinterest import DEFAULT_BASE, PinterestSource
+from .sources import pexels, pinterest
+
+SOURCES = ("pinterest", "pexels")
 
 
 def ask(prompt: str, default: str) -> str:
@@ -19,8 +21,10 @@ def ask(prompt: str, default: str) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    p = argparse.ArgumentParser(prog="pinpick", description="Scarica foto a caso dalle tue bacheche Pinterest.")
-    p.add_argument("--keyword", "-k", help="parola chiave (titolo, descrizione o nome bacheca)")
+    p = argparse.ArgumentParser(prog="pinpick", description="Scarica foto a caso da Pinterest (tue bacheche) o Pexels.")
+    p.add_argument("--source", "-s", choices=SOURCES, default="pinterest",
+                   help="pinterest = le tue bacheche (token), pexels = tutto il catalogo (chiave gratuita)")
+    p.add_argument("--keyword", "-k", help="parola chiave")
     p.add_argument("--orientation", "-o", choices=ORIENTATIONS, help="orientamento della foto")
     p.add_argument("--count", "-n", type=int, help="quante foto scaricare")
     p.add_argument("--out", type=Path, default=Path("foto"), help="cartella di destinazione (default: ./foto)")
@@ -28,10 +32,23 @@ def build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def make_source(name: str):
+    """Crea la fonte leggendo le credenziali dall'ambiente (mai da file o riga di comando)."""
+    base = os.environ.get("PINPICK_API_BASE")
+    if name == "pexels":
+        key = os.environ.get("PEXELS_API_KEY")
+        if not key:
+            raise ConfigError("manca la chiave: imposta PEXELS_API_KEY (gratuita su pexels.com/api)")
+        return pexels.PexelsSource(key, base or pexels.DEFAULT_BASE)
+    token = os.environ.get("PINTEREST_ACCESS_TOKEN")
+    if not token:
+        raise ConfigError("manca il token: imposta PINTEREST_ACCESS_TOKEN (vedi README, sezione Token)")
+    return pinterest.PinterestSource(token, base or pinterest.DEFAULT_BASE)
+
+
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
-    interactive = sys.stdin.isatty()
-    if interactive:  # chiede solo cio che manca
+    if sys.stdin.isatty():  # chiede solo cio che manca
         if args.keyword is None:
             args.keyword = ask("Parola chiave (vuoto = qualsiasi)", "")
         if args.orientation is None:
@@ -41,17 +58,15 @@ def main(argv: list[str] | None = None) -> int:
     keyword, orientation, count = args.keyword or "", args.orientation or "any", args.count or 1
 
     try:
-        token = os.environ.get("PINTEREST_ACCESS_TOKEN")
-        if not token:
-            raise ConfigError(
-                "manca il token: imposta la variabile PINTEREST_ACCESS_TOKEN (vedi README, sezione Token)"
-            )
-        source = PinterestSource(token, os.environ.get("PINPICK_API_BASE", DEFAULT_BASE))
+        source = make_source(args.source)
         history = History(args.out / ".scaricate.json")
-        chosen = select(
-            source.photos(), keyword, orientation, count,
-            exclude_ids=set() if args.allow_repeats else history.ids,
-        )
+        if source.handles_search:  # il server ha gia filtrato: non rifiltrare per testo
+            candidates = source.photos(keyword, orientation)
+            chosen = select(candidates, "", orientation, count,
+                            exclude_ids=set() if args.allow_repeats else history.ids)
+        else:
+            chosen = select(source.photos(), keyword, orientation, count,
+                            exclude_ids=set() if args.allow_repeats else history.ids)
         if not chosen:
             print("Nessuna foto trovata con questi criteri (o le hai gia scaricate tutte).")
             return EXIT_NO_RESULTS
@@ -59,6 +74,8 @@ def main(argv: list[str] | None = None) -> int:
             path = download(photo, args.out)
             history.add(photo.id)
             print(f"Scaricata: {path}  [{photo.board} | {photo.orientation} {photo.width}x{photo.height}]")
+            if photo.credit:
+                print(f"   Credito: {photo.credit}")
         return EXIT_OK
     except PinPickError as exc:
         print(f"Errore: {exc}", file=sys.stderr)

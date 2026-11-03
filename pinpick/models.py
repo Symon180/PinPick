@@ -14,6 +14,7 @@ class Photo:
     width: int
     height: int
     board: str = ""
+    credit: str = ""
 
     @property
     def orientation(self) -> str:

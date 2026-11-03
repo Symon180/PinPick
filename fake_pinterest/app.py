@@ -11,6 +11,7 @@ import zlib
 from flask import Flask, Response, jsonify, request
 
 TOKEN = "demo-token"
+PEXELS_KEY = "demo-key"
 SERVER_PAGE = 4  # pagine piccole apposta: forza il client a usare la paginazione
 
 BOARDS = [{"id": "b1", "name": "Viaggi"}, {"id": "b2", "name": "Cucina"}]
@@ -83,5 +84,28 @@ def create_app() -> Flask:
             if p == pid:
                 return Response(png(w, h), mimetype="image/png")
         return Response("non trovato", 404)
+
+    # --- finta API Pexels (chiave: demo-key) --------------------------------
+    def pexels_search():
+        if request.headers.get("Authorization") != PEXELS_KEY:
+            return jsonify(error="Unauthorized"), 401
+        query = request.args.get("query", "").lower()
+        wanted = request.args.get("orientation")
+        page = request.args.get("page", 1, type=int)
+        base = request.host_url.rstrip("/")
+        hits = [
+            {"id": 1000 + i, "alt": title, "width": w, "height": h, "photographer": "Mario Rossi",
+             "url": f"https://www.pexels.com/photo/{1000 + i}/",
+             "src": {"large2x": f"{base}/img/{pid}.png"}}
+            for i, (pid, title, desc, w, h, _b) in enumerate(PINS)
+            if query in f"{title} {desc}".lower()
+            and (not wanted or wanted == ("square" if w == h else "portrait" if h > w else "landscape"))
+        ]
+        chunk = hits[(page - 1) * SERVER_PAGE : page * SERVER_PAGE]
+        more = page * SERVER_PAGE < len(hits)
+        return jsonify(photos=chunk, next_page=f"{base}/v1/search?page={page + 1}" if more else None)
+
+    app.add_url_rule("/v1/search", "pexels_search", pexels_search)
+    app.add_url_rule("/v1/curated", "pexels_curated", pexels_search)
 
     return app

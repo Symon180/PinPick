@@ -21,6 +21,8 @@ TIMEOUT_S = 20
 
 
 class PinterestSource:
+    handles_search = False  # parola chiave e orientamento si filtrano in locale
+
     def __init__(self, token: str, base_url: str = DEFAULT_BASE):
         self.token = token
         self.base_url = base_url.rstrip("/")
@@ -54,7 +56,7 @@ class PinterestSource:
                 return
 
     # -- Foto -------------------------------------------------------------
-    def photos(self) -> Iterator[Photo]:
+    def photos(self, keyword: str = "", orientation: str = "any") -> Iterator[Photo]:
         for board in self._paged("/v5/boards"):
             for pin in self._paged(f"/v5/boards/{board['id']}/pins"):
                 photo = parse_pin(pin, board.get("name", ""))

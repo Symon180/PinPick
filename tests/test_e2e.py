@@ -56,3 +56,44 @@ def test_cli_token_rifiutato(tmp_path, monkeypatch, capsys):
     monkeypatch.setenv("PINTEREST_ACCESS_TOKEN", "scaduto")
     assert main(["--out", str(tmp_path)]) == 2
     assert "token" in capsys.readouterr().err
+
+
+# --- Pexels (stessa finta API, chiave demo-key) --------------------------------
+from pinpick.sources.pexels import PexelsSource, parse_photo  # noqa: E402
+
+
+def test_pexels_ricerca_per_parola_chiave_con_paginazione(api_url):
+    ids = {p.id for p in PexelsSource("demo-key", api_url).photos("a")}  # "a" compare in quasi tutti i testi
+    assert len(ids) >= 5  # piu di una pagina da 4
+    assert all(i.startswith("pexels-") for i in ids)
+
+
+def test_pexels_filtra_orientamento_sul_server(api_url):
+    photos = list(PexelsSource("demo-key", api_url).photos("", "portrait"))
+    assert photos and all(p.orientation == "portrait" for p in photos)
+
+
+def test_pexels_chiave_sbagliata(api_url):
+    with pytest.raises(AuthError):
+        list(PexelsSource("no", api_url).photos("mare"))
+
+
+def test_pexels_parse_scarta_voci_senza_immagine():
+    assert parse_photo({"id": 1, "src": {}}) is None
+    p = parse_photo({"id": 5, "alt": "x", "width": 10, "height": 20, "photographer": "Anna",
+                     "url": "u", "src": {"large": "L"}})
+    assert p.id == "pexels-5" and "Anna" in p.credit and p.orientation == "portrait"
+
+
+def test_cli_pexels_scarica_e_mostra_il_credito(tmp_path, monkeypatch, capsys):
+    monkeypatch.setenv("PEXELS_API_KEY", "demo-key")
+    assert main(["-s", "pexels", "-k", "pizza", "-n", "1", "--out", str(tmp_path)]) == 0
+    out = capsys.readouterr().out
+    assert "Credito: Mario Rossi (Pexels)" in out
+    assert any(p.suffix == ".png" for p in tmp_path.iterdir())
+
+
+def test_cli_pexels_senza_chiave(tmp_path, monkeypatch, capsys):
+    monkeypatch.delenv("PEXELS_API_KEY", raising=False)
+    assert main(["-s", "pexels", "--out", str(tmp_path)]) == 2
+    assert "PEXELS_API_KEY" in capsys.readouterr().err
